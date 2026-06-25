@@ -1,0 +1,180 @@
+<main class="app-shell">
+  <aside class="filters-panel">
+    <div class="brand-block">
+      <span class="eyebrow">Semantic Memory</span>
+      <h1>Graph Visor</h1>
+      <p>Explora hechos, entidades, chunks y evidencia por usuario.</p>
+    </div>
+
+    <section class="control-group">
+      <label>
+        Usuario
+        <select [(ngModel)]="selectedUserKey" (change)="applySelectedUser()">
+          <option value="">Todos los usuarios</option>
+          <option *ngFor="let user of users" [value]="userKey(user.tenantId, user.userId)">
+            {{ user.tenantId }} / {{ user.userId }}
+          </option>
+        </select>
+      </label>
+
+      <div class="field-grid">
+        <label>
+          Tenant
+          <input [(ngModel)]="query.tenantId" placeholder="default" />
+        </label>
+
+        <label>
+          User ID
+          <input [(ngModel)]="query.userId" placeholder="Juan" />
+        </label>
+      </div>
+
+      <label>
+        Buscar
+        <input [(ngModel)]="query.search" (keyup.enter)="loadGraph()" placeholder="libros, Neo4j, preferencia..." />
+      </label>
+
+      <label>
+        Estado
+        <select [(ngModel)]="query.status">
+          <option value="All">Todos</option>
+          <option *ngFor="let status of availableStatuses" [value]="status">{{ status }}</option>
+        </select>
+      </label>
+
+      <label>
+        Relacion
+        <select [(ngModel)]="query.relationType">
+          <option value="">Todas</option>
+          <option *ngFor="let relation of relationTypes" [value]="relation">{{ relation }}</option>
+        </select>
+      </label>
+
+      <label>
+        Limite
+        <input type="number" min="10" max="500" step="10" [(ngModel)]="query.limit" />
+      </label>
+    </section>
+
+    <section class="button-row">
+      <button type="button" class="primary" (click)="loadGraph()" [disabled]="loading">
+        {{ loading ? 'Cargando' : 'Actualizar' }}
+      </button>
+      <button type="button" (click)="fitGraph()" [disabled]="!networkReady">Centrar</button>
+    </section>
+
+    <section class="status-panel">
+      <h2>Conexion</h2>
+      <div class="status-line" *ngFor="let check of healthEntries">
+        <span [class.ok]="check.ok" [class.off]="!check.ok"></span>
+        <strong>{{ check.name }}</strong>
+        <small>{{ check.configured ? (check.ok ? 'ok' : check.error || 'error') : 'sin configurar' }}</small>
+      </div>
+    </section>
+  </aside>
+
+  <section class="workspace">
+    <header class="topbar">
+      <div class="metric">
+        <strong>{{ graph?.stats?.nodes ?? 0 }}</strong>
+        <span>Nodos</span>
+      </div>
+      <div class="metric">
+        <strong>{{ graph?.stats?.edges ?? 0 }}</strong>
+        <span>Relaciones</span>
+      </div>
+      <div class="metric">
+        <strong>{{ graph?.stats?.chunks ?? 0 }}</strong>
+        <span>Chunks</span>
+      </div>
+      <div class="metric">
+        <strong>{{ graph?.stats?.evidence ?? 0 }}</strong>
+        <span>Evidencias</span>
+      </div>
+      <div class="topbar-actions">
+        <button type="button" [class.active]="physicsEnabled" (click)="togglePhysics()">Physics</button>
+        <button type="button" (click)="stabilizeGraph()" [disabled]="!networkReady">Estabilizar</button>
+      </div>
+    </header>
+
+    <div class="warnings" *ngIf="warnings.length > 0">
+      <p *ngFor="let warning of warnings">{{ warning }}</p>
+    </div>
+
+    <section class="graph-layout">
+      <div class="graph-surface">
+        <div #graphCanvas class="graph-canvas"></div>
+        <div class="empty-state" *ngIf="!loading && graph && graph.nodes.length === 0">
+          <h2>Sin nodos para estos filtros</h2>
+          <p>Hay chunks en Postgres aunque Neo4j no tenga hechos para visualizar.</p>
+        </div>
+      </div>
+
+      <aside class="detail-panel">
+        <ng-container *ngIf="selectedNode">
+          <span class="eyebrow">Nodo</span>
+          <h2>{{ selectedNode.label }}</h2>
+          <dl>
+            <dt>Tipo</dt>
+            <dd>{{ selectedNode.type }}</dd>
+            <dt>Estado</dt>
+            <dd>{{ selectedNode.status }}</dd>
+            <dt>Usuario</dt>
+            <dd>{{ selectedNode.tenantId }} / {{ selectedNode.userId }}</dd>
+            <dt>Grado</dt>
+            <dd>{{ selectedNode.degree }}</dd>
+          </dl>
+          <pre>{{ selectedNode.properties | json }}</pre>
+        </ng-container>
+
+        <ng-container *ngIf="selectedEdge">
+          <span class="eyebrow">Relacion</span>
+          <h2>{{ selectedEdge.relationType }}</h2>
+          <dl>
+            <dt>Confianza</dt>
+            <dd>{{ selectedEdge.confidence | number: '1.2-2' }}</dd>
+            <dt>Estado</dt>
+            <dd>{{ selectedEdge.status }}</dd>
+            <dt>Actualizada</dt>
+            <dd>{{ selectedEdge.updatedAt || 'sin fecha' }}</dd>
+          </dl>
+          <pre>{{ selectedEdge.properties | json }}</pre>
+        </ng-container>
+
+        <ng-container *ngIf="!selectedNode && !selectedEdge">
+          <span class="eyebrow">Detalle</span>
+          <h2>Selecciona un nodo o relacion</h2>
+          <p>El panel muestra propiedades, confianza y contexto operativo del elemento seleccionado.</p>
+        </ng-container>
+      </aside>
+    </section>
+
+    <section class="chunks-panel">
+      <div class="section-heading">
+        <h2>Chunks recientes</h2>
+        <span>{{ graph?.chunks?.length ?? 0 }} resultados</span>
+      </div>
+
+      <div class="chunks-table" *ngIf="graph?.chunks?.length; else noChunks">
+        <article *ngFor="let chunk of graph?.chunks" class="chunk-row">
+          <div>
+            <strong>{{ chunk.conversationId || 'sin conversationId' }}</strong>
+            <p>{{ chunk.rawTextPreview }}</p>
+          </div>
+          <dl>
+            <dt>Status</dt>
+            <dd>{{ chunk.status }}</dd>
+            <dt>Fuente</dt>
+            <dd>{{ chunk.sourceType }}</dd>
+            <dt>Creado</dt>
+            <dd>{{ chunk.createdAt | date: 'short' }}</dd>
+          </dl>
+        </article>
+      </div>
+
+      <ng-template #noChunks>
+        <p class="muted">No hay chunks para los filtros actuales.</p>
+      </ng-template>
+    </section>
+  </section>
+</main>
