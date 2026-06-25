@@ -15,7 +15,7 @@ const browserDist = path.resolve(__dirname, '../dist/semantic-memory-visor/brows
 app.use(express.json());
 
 const neo4jConfig = {
-  uri: process.env.NEO4J_URI,
+  uri: normalizeNeo4jUri(process.env.NEO4J_URI),
   username: process.env.NEO4J_USERNAME ?? process.env.NEO4J_USER,
   password: process.env.NEO4J_PASSWORD,
   database: process.env.NEO4J_DATABASE ?? 'neo4j'
@@ -144,9 +144,20 @@ async function checkNeo4j() {
 
   try {
     await neo4jDriver.verifyConnectivity();
-    return { ok: true, configured: true, database: neo4jConfig.database };
+    return {
+      ok: true,
+      configured: true,
+      database: neo4jConfig.database,
+      uri: describeNeo4jUri(neo4jConfig.uri)
+    };
   } catch (error) {
-    return { ok: false, configured: true, error: error.message };
+    return {
+      ok: false,
+      configured: true,
+      database: neo4jConfig.database,
+      uri: describeNeo4jUri(neo4jConfig.uri),
+      error: error.message
+    };
   }
 }
 
@@ -513,6 +524,46 @@ function resolvePostgresSsl(connectionString) {
     return host === 'localhost' || host === '127.0.0.1' ? false : { rejectUnauthorized: false };
   } catch {
     return { rejectUnauthorized: false };
+  }
+}
+
+function normalizeNeo4jUri(rawUri) {
+  if (!rawUri || !rawUri.trim()) {
+    return undefined;
+  }
+
+  const trimmedUri = rawUri.trim();
+
+  try {
+    const uri = new URL(trimmedUri);
+
+    if (!uri.hostname.endsWith('.databases.neo4j.io') || uri.protocol === 'neo4j+s:') {
+      return trimmedUri;
+    }
+
+    const port = uri.port ? `:${uri.port}` : '';
+    const path = uri.pathname === '/' ? '' : uri.pathname;
+
+    return `neo4j+s://${uri.hostname}${port}${path}${uri.search}`;
+  } catch {
+    return trimmedUri;
+  }
+}
+
+function describeNeo4jUri(uri) {
+  if (!uri) {
+    return undefined;
+  }
+
+  try {
+    const parsed = new URL(uri);
+    return {
+      scheme: parsed.protocol.replace(':', ''),
+      host: parsed.hostname,
+      port: parsed.port || undefined
+    };
+  } catch {
+    return { raw: 'invalid-uri-format' };
   }
 }
 

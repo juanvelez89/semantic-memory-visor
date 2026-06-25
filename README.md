@@ -49,6 +49,14 @@ HOST=0.0.0.0
 PORT=4300
 ```
 
+Para Neo4j Aura usa siempre:
+
+```env
+NEO4J_URI=neo4j+s://your-instance.databases.neo4j.io
+```
+
+Si el deploy queda con `neo4j://...databases.neo4j.io`, el driver puede fallar con `No routing servers available`. El visor normaliza automaticamente hosts de Aura a `neo4j+s://`, pero conviene dejar la variable correcta en Coolify.
+
 No guardes credenciales reales en git.
 
 ## Desarrollo
